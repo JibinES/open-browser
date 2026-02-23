@@ -31,7 +31,11 @@ services:
     image: coollabsio/openclaw:latest
     container_name: openclaw-agent
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "${OPENCLAW_PORT:-8080}:8080"
+      - "18789:18789"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       ollama:
         condition: service_healthy
@@ -39,29 +43,31 @@ services:
       - openclaw-data:/data
       - ./openclaw-config.json:/app/config/openclaw.json:ro
     environment:
-      # Ollama connection (via host network)
-      - OLLAMA_BASE_URL=http://127.0.0.1:${OLLAMA_PORT:-11434}
+      # Ollama connection (via docker service name)
+      - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_API_KEY=ollama-local
 
       # Primary model
       - OPENCLAW_PRIMARY_MODEL=ollama/${OLLAMA_MODEL:-qwen3-coder:32b}
 
       # Browser — connect to host Chrome via CDP
-      - BROWSER_CDP_URL=http://127.0.0.1:${CHROME_CDP_PORT:-9222}
+      - BROWSER_CDP_URL=http://host.docker.internal:${CHROME_CDP_PORT:-9222}
       - BROWSER_DEFAULT_PROFILE=automation
       - BROWSER_EVALUATE_ENABLED=false
 
       # Web UI auth
       - AUTH_PASSWORD=${AUTH_PASSWORD:-changeme}
       - AUTH_USERNAME=${AUTH_USERNAME:-admin}
-      - PORT=${OPENCLAW_PORT:-8080}
+      - PORT=8080
 
       # Gateway
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
-      - OPENCLAW_GATEWAY_BIND=loopback
+      - OPENCLAW_GATEWAY_BIND=lan
 
-      # Telegram (optional)
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      # Telegram
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_DM_POLICY=allowlist
+      - TELEGRAM_ALLOWED_USER_IDS=${TELEGRAM_ALLOWED_USER_ID}
 
 volumes:
   ollama-data:

@@ -2,7 +2,7 @@
   "models": {
     "providers": {
       "ollama": {
-        "baseUrl": "http://127.0.0.1:11434",
+        "baseUrl": "http://ollama:11434",
         "apiKey": "ollama-local",
         "api": "ollama"
       }
@@ -25,8 +25,18 @@
     "web_search": { "enabled": true },
     "filesystem": { "enabled": false }
   },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "allowlist",
+      "allowFrom": ["917548904"],
+      "streaming": true,
+      "replyToMode": "first",
+      "textChunkLimit": 4000
+    }
+  },
   "gateway": {
-    "bind": "loopback"
+    "bind": "lan"
   },
   "systemPrompt": "You are a browser automation assistant. You control the user's Chrome browser to complete tasks.\n\nRULES:\n1. For actions that MODIFY data (sending emails, submitting forms, clicking buttons that change state), ALWAYS summarize what you will do and ask for confirmation.\n2. For read-only actions (viewing pages, searching), proceed without confirmation.\n3. After completing a task, take a screenshot and send it as confirmation.\n4. If you encounter a login page or 2FA prompt, inform the user and wait.\n5. Never share or display passwords, tokens, or sensitive data.\n6. If a task fails, explain what happened and suggest next steps."
 }
