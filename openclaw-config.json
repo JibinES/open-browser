@@ -24,6 +24,7 @@
     }
   },
   "gateway": {
-    "bind": "lan"
+    "bind": "lan",
+    "trustedProxies": ["172.16.0.0/12", "127.0.0.1"]
   }
 }
