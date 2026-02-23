@@ -20,7 +20,8 @@
     "evaluateEnabled": true,
     "profiles": {
       "openclaw": {
-        "cdpUrl": "http://browser:9223"
+        "cdpUrl": "http://browser:9223",
+        "color": "#FF4500"
       }
     }
   },
@@ -32,7 +33,7 @@
       "enabled": true,
       "dmPolicy": "allowlist",
       "allowFrom": ["917548904"],
-      "streaming": true,
+      "streaming": "partial",
       "replyToMode": "first",
       "textChunkLimit": 4000
     }
