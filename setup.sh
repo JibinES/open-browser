@@ -32,14 +32,32 @@ header() {
 }
 
 # ---- Load .env ----
-if [[ -f .env ]]; then
-    set -a
-    source .env
-    set +a
-    log "Loaded .env configuration"
-else
-    err ".env file not found! Copy .env.example to .env and edit it."
-    exit 1
+if [[ ! -f .env ]]; then
+    if [[ -f .env.example ]]; then
+        cp .env.example .env
+        warn ".env not found — created from .env.example"
+        warn "Edit .env with your Telegram token/user ID if needed."
+    else
+        err ".env file not found and no .env.example to copy from!"
+        exit 1
+    fi
+fi
+set -a
+source .env
+set +a
+log "Loaded .env configuration"
+
+# ---- Auto-generate gateway token if empty ----
+if [[ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then
+    OPENCLAW_GATEWAY_TOKEN=$(openssl rand -hex 32)
+    # Persist it into .env so it survives restarts
+    if grep -q '^OPENCLAW_GATEWAY_TOKEN=' .env; then
+        sed -i "s|^OPENCLAW_GATEWAY_TOKEN=.*|OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}|" .env
+    else
+        echo "OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}" >> .env
+    fi
+    export OPENCLAW_GATEWAY_TOKEN
+    log "Generated gateway token (saved to .env)"
 fi
 
 # ---- Pre-flight checks ----
