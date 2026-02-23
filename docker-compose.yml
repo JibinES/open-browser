@@ -1,0 +1,70 @@
+services:
+  # ---- OLLAMA (Local LLM Server) ----
+  ollama:
+    image: ollama/ollama:latest
+    container_name: openclaw-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_MAX_LOADED_MODELS=1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---- OPENCLAW (AI Agent) ----
+  openclaw:
+    image: coollabsio/openclaw:latest
+    container_name: openclaw-agent
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - openclaw-data:/data
+      - ./openclaw-config.json:/app/config/openclaw.json:ro
+    environment:
+      # Ollama connection (via host network)
+      - OLLAMA_BASE_URL=http://127.0.0.1:${OLLAMA_PORT:-11434}
+      - OLLAMA_API_KEY=ollama-local
+
+      # Primary model
+      - OPENCLAW_PRIMARY_MODEL=ollama/${OLLAMA_MODEL:-qwen3-coder:32b}
+
+      # Browser — connect to host Chrome via CDP
+      - BROWSER_CDP_URL=http://127.0.0.1:${CHROME_CDP_PORT:-9222}
+      - BROWSER_DEFAULT_PROFILE=automation
+      - BROWSER_EVALUATE_ENABLED=false
+
+      # Web UI auth
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-changeme}
+      - AUTH_USERNAME=${AUTH_USERNAME:-admin}
+      - PORT=${OPENCLAW_PORT:-8080}
+
+      # Gateway
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
+      - OPENCLAW_GATEWAY_BIND=loopback
+
+      # Telegram (optional)
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+
+volumes:
+  ollama-data:
+    name: openclaw-ollama-data
+  openclaw-data:
+    name: openclaw-agent-data
