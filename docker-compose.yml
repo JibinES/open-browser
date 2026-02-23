@@ -57,6 +57,7 @@ services:
       - ./openclaw-config.json:/app/config/openclaw.json:ro
     environment:
       # Ollama connection (via docker service name)
+      - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_URL=http://ollama:11434
       - OLLAMA_API_KEY=ollama-local
 
