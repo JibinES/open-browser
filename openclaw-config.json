@@ -2,9 +2,8 @@
   "models": {
     "providers": {
       "ollama": {
-        "baseUrl": "http://ollama:11434",
-        "apiKey": "ollama-local",
-        "api": "ollama"
+        "baseUrl": "http://ollama:11434/v1",
+        "apiKey": "ollama-local"
       }
     }
   },
