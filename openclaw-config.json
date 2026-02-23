@@ -3,14 +3,29 @@
     "providers": {
       "ollama": {
         "baseUrl": "http://ollama:11434/v1",
-        "apiKey": "ollama-local"
+        "apiKey": "ollama-local",
+        "models": [
+          {
+            "id": "qwen3-coder:30b",
+            "contextWindow": 65536,
+            "maxOutputTokens": 8192
+          }
+        ]
       }
     }
   },
   "browser": {
     "enabled": true,
     "defaultProfile": "openclaw",
-    "evaluateEnabled": true
+    "evaluateEnabled": true,
+    "profiles": {
+      "openclaw": {
+        "cdpUrl": "http://browser:9223"
+      }
+    }
+  },
+  "tools": {
+    "deny": ["web_search", "web_fetch"]
   },
   "channels": {
     "telegram": {
