@@ -99,71 +99,6 @@ else
     warn "GPU passthrough might fail. See: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
 fi
 
-# ---- Find Chrome ----
-header "Chrome Detection"
-
-if [[ -n "${CHROME_PATH:-}" ]]; then
-    if [[ -x "$CHROME_PATH" ]]; then
-        log "Using Chrome from .env: $CHROME_PATH"
-    else
-        err "CHROME_PATH in .env is not executable: $CHROME_PATH"
-        exit 1
-    fi
-else
-    # Auto-detect Chrome
-    CHROME_CANDIDATES=(
-        "google-chrome"
-        "google-chrome-stable"
-        "chromium-browser"
-        "chromium"
-        "/usr/bin/google-chrome"
-        "/usr/bin/google-chrome-stable"
-        "/usr/bin/chromium-browser"
-        "/usr/bin/chromium"
-        "/snap/bin/chromium"
-        "/opt/google/chrome/google-chrome"
-    )
-
-    CHROME_PATH=""
-    for candidate in "${CHROME_CANDIDATES[@]}"; do
-        if command -v "$candidate" &>/dev/null 2>&1 || [[ -x "$candidate" ]]; then
-            CHROME_PATH="$candidate"
-            break
-        fi
-    done
-
-    if [[ -z "$CHROME_PATH" ]]; then
-        err "Chrome/Chromium not found on this system!"
-        err "Set CHROME_PATH in .env to your Chrome binary path."
-        exit 1
-    fi
-    log "Auto-detected Chrome: $CHROME_PATH"
-fi
-
-CHROME_VERSION=$("$CHROME_PATH" --version 2>/dev/null || echo "unknown")
-log "Chrome version: $CHROME_VERSION"
-
-# ---- Kill existing Chrome CDP (if any) ----
-CDP_PORT="${CHROME_CDP_PORT:-9222}"
-
-if lsof -i :"$CDP_PORT" &>/dev/null 2>&1; then
-    warn "Port $CDP_PORT is already in use."
-    EXISTING_PID=$(lsof -ti :"$CDP_PORT" 2>/dev/null | head -1)
-    if [[ -n "$EXISTING_PID" ]]; then
-        EXISTING_CMD=$(ps -p "$EXISTING_PID" -o comm= 2>/dev/null || echo "unknown")
-        warn "Process: $EXISTING_CMD (PID: $EXISTING_PID)"
-        read -rp "Kill it and continue? [y/N] " answer
-        if [[ "$answer" =~ ^[Yy]$ ]]; then
-            kill "$EXISTING_PID" 2>/dev/null || true
-            sleep 2
-            log "Killed process on port $CDP_PORT"
-        else
-            err "Cannot continue with port $CDP_PORT in use."
-            exit 1
-        fi
-    fi
-fi
-
 # ---- Stop existing containers ----
 header "Container Setup"
 
@@ -216,41 +151,12 @@ log "Model $MODEL is ready"
 MODEL_SIZE=$(docker exec openclaw-ollama ollama list 2>/dev/null | grep "$MODEL" | awk '{print $3, $4}' || echo "unknown")
 log "Model size on disk: $MODEL_SIZE"
 
-# ---- Launch Chrome with CDP ----
-header "Launching Chrome (CDP mode)"
+# ---- Start OpenClaw + Browser ----
+header "Starting OpenClaw + Browser"
 
-CHROME_USER_DATA_DIR="${HOME}/.openclaw-chrome-profile"
-mkdir -p "$CHROME_USER_DATA_DIR"
-
-info "Starting Chrome with remote debugging on port $CDP_PORT..."
-"$CHROME_PATH" \
-    --remote-debugging-port="$CDP_PORT" \
-    --user-data-dir="$CHROME_USER_DATA_DIR" \
-    --no-first-run \
-    --no-default-browser-check \
-    --disable-background-timer-throttling \
-    --disable-backgrounding-occluded-windows \
-    --disable-renderer-backgrounding \
-    &>/dev/null &
-
-CHROME_PID=$!
-sleep 3
-
-# Verify Chrome CDP is running
-if curl -sf "http://127.0.0.1:$CDP_PORT/json/version" &>/dev/null; then
-    log "Chrome CDP is running on port $CDP_PORT (PID: $CHROME_PID)"
-else
-    err "Chrome failed to start with CDP. Check if another Chrome instance is running."
-    err "Try closing all Chrome windows and run this script again."
-    exit 1
-fi
-
-# ---- Start OpenClaw ----
-header "Starting OpenClaw"
-
-info "Starting OpenClaw container..."
-$COMPOSE_CMD up -d openclaw
-log "OpenClaw container started"
+info "Starting browser sidecar and OpenClaw..."
+$COMPOSE_CMD up -d
+log "All containers started"
 
 # Wait for OpenClaw web UI
 info "Waiting for OpenClaw web UI..."
@@ -269,12 +175,6 @@ if [[ $RETRIES -lt 30 ]]; then
     log "OpenClaw web UI is ready"
 fi
 
-# ---- Print gateway token ----
-GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-}"
-if [[ -z "$GATEWAY_TOKEN" ]]; then
-    GATEWAY_TOKEN=$(docker exec openclaw-agent cat /data/.openclaw/.gateway-token 2>/dev/null || echo "")
-fi
-
 # ---- Summary ----
 header "Setup Complete!"
 
@@ -284,29 +184,23 @@ echo -e "  ${BOLD}Ollama${NC}"
 echo -e "    API:    http://127.0.0.1:${OLLAMA_PORT:-11434}"
 echo -e "    Model:  ${CYAN}$MODEL${NC}"
 echo ""
-echo -e "  ${BOLD}Chrome${NC}"
-echo -e "    CDP:    http://127.0.0.1:$CDP_PORT"
-echo -e "    PID:    $CHROME_PID"
-echo -e "    Profile: $CHROME_USER_DATA_DIR"
+echo -e "  ${BOLD}Browser${NC}"
+echo -e "    Managed by Docker sidecar (openclaw-browser)"
+echo -e "    Access via OpenClaw Web UI: ${CYAN}http://127.0.0.1:${OPENCLAW_PORT:-8080}/browser/${NC}"
 echo ""
 echo -e "  ${BOLD}OpenClaw${NC}"
 echo -e "    Web UI: ${CYAN}http://127.0.0.1:${OPENCLAW_PORT:-8080}${NC}"
 echo -e "    Login:  ${AUTH_USERNAME:-admin} / ${AUTH_PASSWORD:-changeme}"
-if [[ -n "$GATEWAY_TOKEN" ]]; then
-    echo -e "    Token:  $GATEWAY_TOKEN"
-fi
 echo ""
 echo -e "  ${BOLD}Quick Commands${NC}"
 echo -e "    View logs:     docker logs -f openclaw-agent"
 echo -e "    Ollama logs:   docker logs -f openclaw-ollama"
+echo -e "    Browser logs:  docker logs -f openclaw-browser"
 echo -e "    Stop all:      ./stop.sh"
 echo -e "    Restart:       ./setup.sh"
 echo -e "    Change model:  Edit OLLAMA_MODEL in .env, then ./setup.sh"
 echo ""
-echo -e "${YELLOW}  TIP: Chrome is running with a separate profile.${NC}"
-echo -e "${YELLOW}  Log into your accounts (Gmail, etc.) in the Chrome${NC}"
-echo -e "${YELLOW}  window — OpenClaw will reuse those sessions.${NC}"
+echo -e "${YELLOW}  TIP: Go to http://127.0.0.1:${OPENCLAW_PORT:-8080}/browser/${NC}"
+echo -e "${YELLOW}  to see the browser. Log into your accounts (Gmail, etc.)${NC}"
+echo -e "${YELLOW}  there — OpenClaw will reuse those sessions.${NC}"
 echo ""
-
-# Save PID for stop script
-echo "$CHROME_PID" > "$SCRIPT_DIR/.chrome-pid"

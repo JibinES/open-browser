@@ -26,6 +26,20 @@ services:
       retries: 10
       start_period: 30s
 
+  # ---- BROWSER (Chrome sidecar — required by coollabsio image) ----
+  browser:
+    image: coollabsio/openclaw-browser:latest
+    container_name: openclaw-browser
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - CHROME_CLI=--remote-debugging-port=9222
+    volumes:
+      - browser-data:/config
+    shm_size: 2g
+
   # ---- OPENCLAW (AI Agent) ----
   openclaw:
     image: coollabsio/openclaw:latest
@@ -33,12 +47,11 @@ services:
     restart: unless-stopped
     ports:
       - "${OPENCLAW_PORT:-8080}:8080"
-      - "18789:18789"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       ollama:
         condition: service_healthy
+      browser:
+        condition: service_started
     volumes:
       - openclaw-data:/data
       - ./openclaw-config.json:/app/config/openclaw.json:ro
@@ -50,10 +63,10 @@ services:
       # Primary model
       - OPENCLAW_PRIMARY_MODEL=ollama/${OLLAMA_MODEL:-qwen3-coder:32b}
 
-      # Browser — connect to host Chrome via CDP
-      - BROWSER_CDP_URL=http://host.docker.internal:${CHROME_CDP_PORT:-9222}
-      - BROWSER_DEFAULT_PROFILE=automation
-      - BROWSER_EVALUATE_ENABLED=false
+      # Browser — uses the sidecar container
+      - BROWSER_CDP_URL=http://browser:9223
+      - BROWSER_DEFAULT_PROFILE=openclaw
+      - BROWSER_EVALUATE_ENABLED=true
 
       # Web UI auth
       - AUTH_PASSWORD=${AUTH_PASSWORD:-changeme}
@@ -61,7 +74,7 @@ services:
       - PORT=8080
 
       # Gateway
-      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
       - OPENCLAW_GATEWAY_BIND=lan
 
       # Telegram
@@ -74,3 +87,5 @@ volumes:
     name: openclaw-ollama-data
   openclaw-data:
     name: openclaw-agent-data
+  browser-data:
+    name: openclaw-browser-data
